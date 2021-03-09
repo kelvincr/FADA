@@ -20,10 +20,10 @@ from losses import ContrastiveLoss, SpecLoss
 src = 'herbarium'  #mnist
 dst = 'photo'       #svhn
 img_size = 224  #32
-datadir = '/home/villacis/Desktop/villacis/datasets/plantclef20_split/'
-data_dir = '/home/villacis/Desktop/villacis/datasets/plantclef20_split/herbarium'
-data_dir2 = '/home/villacis/Desktop/villacis/datasets/plantclef20_split/photo'
-data_dir2 = '/home/villacis/Desktop/villacis/datasets/todas/todo_photo'
+datadir = '/home/ubuntu/dataset/'
+data_dir = '/home/ubuntu/dataset/herbarium'
+data_dir2 = '/home/ubuntu/dataset/photo'
+#data_dir2 = '/home/villacis/Desktop/villacis/datasets/todas/todo_photo'
 #datadir = '/home/villacis/Desktop/villacis/datasets/plantclef_minida_cropped'
 #datadir = '/home/villacis/Desktop/villacis/datasets/special_10_ind'
 num_epochs1 = 40
@@ -149,6 +149,18 @@ class Dataset(data2.Dataset):
         return X, y
 
 
+train_ratio=.8
+data = datasets.ImageFolder(os.path.join(data_dir), transform=data_transforms['train'])
+train_size = int(train_ratio * len(data))
+test_size = len(data) - train_size
+data_train, data_val = torch.utils.data.random_split(data, [train_size, test_size])
+
+train_loader = torch.utils.data.DataLoader(data_train, batch_size=batch_size, shuffle=True, drop_last=True,
+                                                    num_workers=4)
+val_loader = torch.utils.data.DataLoader(data_val, batch_size=batch_size, shuffle=False, drop_last=False,
+                                                num_workers=4)
+
+
 image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x),
                                           data_transforms[x])
                   for x in ['train', 'val']}
@@ -203,7 +215,7 @@ image_datasets2 = {}
 #image_datasets2 = {x: datasets.ImageFolder(os.path.join(data_dir2, x),
 #                                          data_transforms[x])
 #                  for x in ['train']} #, 'val_photo', 'val'
-image_datasets2['val'] = datasets.ImageFolder('/home/villacis/Desktop/villacis/datasets/plantclef20_split/photo',
+image_datasets2['val'] = datasets.ImageFolder('/home/ubuntu/dataset/photo',
                                           data_transforms['val'])
 
 # hacer la regresion
@@ -312,8 +324,8 @@ print("Carga optimizer")
 #X_s,Y_s=data_loader.sample_src(os.path.join(datadir, src, 'train'), data_transforms['train'])
 #X_t,Y_t=data_loader.sample_tgt(os.path.join(datadir, dst, 'train'), data_transforms['train'], n = 7)
 
-siamese_dataset = FADADatasetSSTaxons('/home/villacis/Desktop/villacis/datasets/plantclef20_ensemble/herbarium',
-                                       '/home/villacis/Desktop/villacis/datasets/todas/todo_photo',
+siamese_dataset = FADADatasetSSTaxons('/home/ubuntu/dataset/herbarium',
+                                       '/home/ubuntu/dataset/photo',
                                         'train',
                                         base_mapping,
                                         class_name_to_id,
