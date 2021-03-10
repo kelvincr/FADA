@@ -20,20 +20,20 @@ from losses import ContrastiveLoss, SpecLoss
 src = 'herbarium'  #mnist
 dst = 'photo'       #svhn
 img_size = 224  #32
-datadir = '/../dataset/'
-data_dir = '/../dataset/herbarium'
-data_dir2 = '/../dataset/photo'
+datadir = '../dataset/'
+data_dir = '../dataset/herbarium'
+data_dir2 = '../dataset/photo'
 #data_dir2 = '/home/villacis/Desktop/villacis/datasets/todas/todo_photo'
 #datadir = '/home/villacis/Desktop/villacis/datasets/plantclef_minida_cropped'
 #datadir = '/home/villacis/Desktop/villacis/datasets/special_10_ind'
-num_epochs1 = 40
+num_epochs1 = 60
 num_epochs2 = 150
 num_epochs3 = 150
 
 
 use_cuda=True if torch.cuda.is_available() else False
 device=torch.device('cuda:0') if use_cuda else torch.device('cpu')
-
+print(device)
 
 classifier = models.ClassifierPro()
 classifier2 = models.ClassifierPro()
