@@ -20,9 +20,9 @@ from losses import ContrastiveLoss, SpecLoss
 src = 'herbarium'  #mnist
 dst = 'photo'       #svhn
 img_size = 224  #32
-datadir = '/home/ubuntu/dataset/'
-data_dir = '/home/ubuntu/dataset/herbarium'
-data_dir2 = '/home/ubuntu/dataset/photo'
+datadir = '/../dataset/'
+data_dir = '/../dataset/herbarium'
+data_dir2 = '/../dataset/photo'
 #data_dir2 = '/home/villacis/Desktop/villacis/datasets/todas/todo_photo'
 #datadir = '/home/villacis/Desktop/villacis/datasets/plantclef_minida_cropped'
 #datadir = '/home/villacis/Desktop/villacis/datasets/special_10_ind'
@@ -155,16 +155,13 @@ train_size = int(train_ratio * len(data))
 test_size = len(data) - train_size
 data_train, data_val = torch.utils.data.random_split(data, [train_size, test_size])
 
-train_loader = torch.utils.data.DataLoader(data_train, batch_size=batch_size, shuffle=True, drop_last=True,
-                                                    num_workers=4)
-val_loader = torch.utils.data.DataLoader(data_val, batch_size=batch_size, shuffle=False, drop_last=False,
-                                                num_workers=4)
 
+image_datasets = {"train": data_train, 
+                   "val": data_val}
 
-image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x),
-                                          data_transforms[x])
-                  for x in ['train', 'val']}
-
+dataloaders_1 = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=60,
+                                             shuffle=True, num_workers=6)
+              for x in ['train', 'val']}
 partition = {}
 partition['train'] = []
 partition['val'] = []
@@ -215,7 +212,7 @@ image_datasets2 = {}
 #image_datasets2 = {x: datasets.ImageFolder(os.path.join(data_dir2, x),
 #                                          data_transforms[x])
 #                  for x in ['train']} #, 'val_photo', 'val'
-image_datasets2['val'] = datasets.ImageFolder('/home/ubuntu/dataset/photo',
+image_datasets2['val'] = datasets.ImageFolder('../dataset/photo',
                                           data_transforms['val'])
 
 # hacer la regresion
@@ -570,4 +567,5 @@ with torch.no_grad():
 
 accuracy = round(acc / float(len(test_dataloader)), 3)
 print("Final accuracy: {}".format(accuracy))
+
 

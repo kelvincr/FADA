@@ -8,33 +8,45 @@ from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
 
 
-# class Net(nn.Module):
-#     def __init__(self):
-#         super(Net, self).__init__()
-#         self.conv1 = nn.Conv2d(1, 32, 3, 1)
-#         self.conv2 = nn.Conv2d(32, 64, 3, 1)
-#         self.dropout1 = nn.Dropout(0.25)
-#         self.dropout2 = nn.Dropout(0.5)
-#         self.fc1 = nn.Linear(9216, 128)
-#         self.fc2 = nn.Linear(128, 10)
-
-#     def forward(self, x):
-#         x = self.conv1(x)
-#         x = F.relu(x)
-#         x = self.conv2(x)
-#         x = F.relu(x)
-#         x = F.max_pool2d(x, 2)
-#         x = self.dropout1(x)
-#         x = torch.flatten(x, 1)
-#         x = self.fc1(x)
-#         x = F.relu(x)
-#         x = self.dropout2(x)
-#         x = self.fc2(x)
-#         output = F.log_softmax(x, dim=1)
-#         return output
-
-
-def train(args, model, device, train_loader, optimizer, epoch):
+def train_stage_1(args, model, device, train_loader, optimizer, epoch):
+    
+for i in range(num_epochs1):
+    total = 0.0
+    correct = 0.0
+    for data,labels in dataloaders_1['train']:
+        data=data.to(device)
+        labels=labels.to(device)
+        optimizer.zero_grad()
+        pred = classifier(encoder(data))
+        _, predicted = torch.max(pred.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+        loss=loss_fn(pred,labels)
+        loss.backward()
+        optimizer.step()
+    accuracy2 = correct / total
+    scheduler.step()
+    acc = 0
+    total = 0.0
+    correct = 0.0
+    for data, labels in dataloaders_1['val']:
+        with torch.no_grad():
+            data=data.to(device)
+            labels=labels.to(device)
+            outputs=classifier(encoder(data))
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+            #acc += (torch.max(y_test_pred,1)[1]==labels).float().mean().item()
+    #accuracy=round(acc / float(len(dataloaders_1['val'])), 3)
+    accuracy = correct / total
+    #print('Accuracy of the network on the 10000 test images: %d %%' % (100 * accuracy))
+    if(accuracy>best_acc):
+        best_acc = accuracy
+        torch.save(encoder.state_dict(),'result/encoder_fada_extra.pth')
+        torch.save(classifier.state_dict(), 'result/classifier_fada_extra.pth')
+        #classifier.save()
+    print("Phase 1 ---- Epoch {} accuracy: {} / {}".format((i+1), accuracy, accuracy2))
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
@@ -113,6 +125,9 @@ def main():
         transforms.ToTensor(),
         transforms.Normalize((0.1307,), (0.3081,))
         ])
+
+    data_dir = '/../dataset/herbarium'
+    data_dir2 = '/../dataset/photo'
     dataset1 = datasets.MNIST('./data', train=True, download=True,
                        transform=transform)
     dataset2 = datasets.MNIST('./data', train=False,
@@ -120,14 +135,22 @@ def main():
     train_loader = torch.utils.data.DataLoader(dataset1,**train_kwargs)
     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
 
+    classifier = models.ClassifierPro()
+    encoder = tmodels.resnet50(pretrained=True)
+    encoder.fc = nn.Sequential()
+
+        print("||||| Stage 1 |||||")
+optimizer=torch.optim.Adam(list(encoder.parameters())+list(classifier.parameters())+list(ssnet.parameters())+list(genusnet.parameters())+list(familynet.parameters()), lr = 0.0001)
+scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[30], gamma=0.1)
+
     model = Net().to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
-        train(args, model, device, train_loader, optimizer, epoch)
-        test(model, device, test_loader)
-        scheduler.step()
+        train_stage_1(args, model, device, train_loader, optimizer, epoch)
+        # test(model, device, test_loader)
+        # scheduler.step()
 
     if args.save_model:
         torch.save(model.state_dict(), "mnist_cnn.pt")
