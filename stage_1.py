@@ -149,8 +149,15 @@ test_size = len(data) - train_size
 data_train, data_val = torch.utils.data.random_split(data, [train_size, test_size])
 
 
+print("class to idx")
+class_to_idx = data.class_to_idx
+print(class_to_idx)
+
 image_datasets = {"train": data_train, 
                    "val": data_val}
+                   
+print(image_datasets["train"])
+print(image_datasets["val"])
 
 dataloaders_1 = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=60,
                             shuffle=True, num_workers=6)
