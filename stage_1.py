@@ -16,12 +16,13 @@ import models
 import data_loader
 import transformations
 from losses import ContrastiveLoss, SpecLoss
+from tqdm import tqdm
 
 src = 'herbarium'  #mnist
 dst = 'photo'       #svhn
 img_size = 224  #32
-datadir = '../dataset/'
-data_dir = '../dataset/herbarium'
+datadir = '../dataset/split/'
+data_dir = '/dev/shm/dataset'
 data_dir2 = '../dataset/photo'
 #data_dir2 = '/home/villacis/Desktop/villacis/datasets/todas/todo_photo'
 #datadir = '/home/villacis/Desktop/villacis/datasets/plantclef_minida_cropped'
@@ -34,6 +35,8 @@ num_epochs3 = 150
 use_cuda=True if torch.cuda.is_available() else False
 device=torch.device('cuda:0') if use_cuda else torch.device('cpu')
 print(device)
+
+print(os.getcwd())
 
 classifier = models.ClassifierPro()
 classifier2 = models.ClassifierPro()
@@ -142,22 +145,21 @@ class Dataset(data2.Dataset):
         return X, y
 
 
-train_ratio=.8
-data = datasets.ImageFolder(os.path.join(data_dir), transform=data_transforms['train'])
-train_size = int(train_ratio * len(data))
-test_size = len(data) - train_size
-data_train, data_val = torch.utils.data.random_split(data, [train_size, test_size])
+# train_ratio=.8
+# data = datasets.ImageFolder(os.path.join(data_dir), transform=data_transforms['train'])
+# train_size = int(train_ratio * len(data))
+# test_size = len(data) - train_size
+# data_train, data_val = torch.utils.data.random_split(data, [train_size, test_size])
 
 
-print("class to idx")
-class_to_idx = data.class_to_idx
-print(class_to_idx)
+# print("class to idx")
+# class_to_idx = data.class_to_idx
+# print(class_to_idx)
 
-image_datasets = {"train": data_train, 
-                   "val": data_val}
-                   
-print(image_datasets["train"])
-print(image_datasets["val"])
+image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x),
+                                          data_transforms[x])
+                  for x in ['train', 'val']}
+                
 
 dataloaders_1 = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=60,
                             shuffle=True, num_workers=6)
@@ -171,8 +173,10 @@ labels2 = {}
 
 base_mapping = image_datasets['train'].class_to_idx
 
+print(base_mapping)
+
 print("Preprocessing datasets")
-class_name_to_id = image_datasets['train'].class_to_idx
+class_name_to_id = base_mapping
 id_to_class_name = {v: k for k, v in class_name_to_id.items()}
 def get_class_id(path):
     class_name = os.path.split(path)[0]
@@ -261,7 +265,7 @@ test_dataloader = val_generator
 print("Finished loading data")
 
 best_acc = 0.0
-for i in range(num_epochs1):
+for i in tqdm(range(num_epochs1)):
     total = 0.0
     correct = 0.0
     for data,labels in dataloaders_1['train']:
@@ -291,10 +295,10 @@ for i in range(num_epochs1):
             #acc += (torch.max(y_test_pred,1)[1]==labels).float().mean().item()
     #accuracy=round(acc / float(len(dataloaders_1['val'])), 3)
     accuracy = correct / total
-    #print('Accuracy of the network on the 10000 test images: %d %%' % (100 * accuracy))
+    print('Accuracy of the network on the 10000 test images: %d %%' % (100 * accuracy))
     if(accuracy>best_acc):
         best_acc = accuracy
-        torch.save(encoder.state_dict(),'result/encoder_fada_extra.pth')
-        torch.save(classifier.state_dict(), 'result/classifier_fada_extra.pth')
+        torch.save(encoder.state_dict(),'../result/encoder_fada_extra.pth')
+        torch.save(classifier.state_dict(), '../result/classifier_fada_extra.pth')
         #classifier.save()
     print("Phase 1 ---- Epoch {} accuracy: {} / {}".format((i+1), accuracy, accuracy2))
