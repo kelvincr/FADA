@@ -34,7 +34,6 @@ def train_stage_1(config, model, encoder, device, train_loader, loss_fn, optimiz
         if batch_idx % config.log_interval == 0:
             wandb.log({"train batch loss": loss.item()})
             if config.dry_run:
-                print('dry-run')
                 break
     accuracy = 100. * correct / total
     return accuracy
@@ -80,8 +79,9 @@ def stage_1(config, device, image_datasets, classifier, encoder, ssnet, genusnet
 
 def train_stage_2(config, model, encoder, device, train_loader, loss_fn, optimizer, epoch):
     model.train()
-    correct, total = 0, 0
+    correct, total, acc  = 0, 0, 0.0
     confusion_matrix = torch.zeros(4, 4)
+    # img0, img1, idx1, idx2, label, op1, op2, same, img0_ss, labelss_0, img1_ss, labelss_1, family1, family2, genus1, genus2, label_genus, label_family
     for batch_idx, (X1, X2, idx1, idx2, ground_truths, op1, op2, same, img0_ss, label0_ss, img1_ss, label1_ss) in enumerate(train_loader):
         X1,X2=X1.to(device),X2.to(device)
         same,ground_truths = same.to(device), ground_truths.to(device)
@@ -98,17 +98,18 @@ def train_stage_2(config, model, encoder, device, train_loader, loss_fn, optimiz
         ground_truths = ground_truths.view(-1)
         loss=loss_fn(y_pred,ground_truths)
         loss.backward()
+        # wandb.log({"discriminator train batch loss": loss.item()})
         if batch_idx % config.log_interval == 0:
+            wandb.log({"discriminator acc": acc})
             wandb.log({"discriminator train batch loss": loss.item()})
             if config.dry_run:
-                print('dry-run')
                 break
     accuracy = 100. * correct / total
     return accuracy
 
-def stage_2(config, device, dataset, discriminator, encoder, ssnet, genusnet, familynet, train_kwargs, test_kwargs):
+def stage_2(config, device, dataset, discriminator, encoder, discriminator_genus, discriminator_family, train_kwargs, test_kwargs):
 
-    data_loader = DataLoader(dataset, **train_kwargs)
+    data_loader = torch.utils.data.DataLoader(dataset, **train_kwargs)
 
     opt_params = list(discriminator.parameters())+list(discriminator_genus.parameters())+list(discriminator_family.parameters())
     optimizer = torch.optim.Adam(opt_params, lr=config.learning_rate)
@@ -118,7 +119,7 @@ def stage_2(config, device, dataset, discriminator, encoder, ssnet, genusnet, fa
     #scheduler = MultiStepLR(optimizer, milestones=[30], gamma=config.gamma)
     val_accuracy, best_acc = 0.0, 0.0
     for epoch in tqdm(range(config.epochs * 2)):
-        train_accuracy = train_stage_2(config, discriminator, encoder, device, train_loader, loss_fn, optimizer, epoch)
+        train_accuracy = train_stage_2(config, discriminator, encoder, device, data_loader, loss_fn, optimizer, epoch)
         optimizer.step()
         wandb.log({"discriminator accuracy": val_accuracy, 'Step': epoch})
         if(val_accuracy>best_acc):
@@ -171,6 +172,7 @@ def main():
     config.num_workers = 6
     config.stage = args.stage
 
+
     wandb.init(project='FADA', config=config, tags=list("baseline"))
 
     result_path = os.path.join(args.result_path, wandb.run.name)
@@ -217,7 +219,7 @@ def main():
     
     data_dir = '/dev/shm/dataset'
     herbarium = os.path.join(data_dir, 'herbarium')
-    photo = os.path.join(data_dir, 'photo_split')
+    photo = os.path.join(data_dir, 'photo')
 
     classifier = models.ClassifierPro().to(device)
     encoder = tmodels.resnet50(pretrained=True).to(device)
@@ -230,7 +232,7 @@ def main():
     discriminator_genus = models.DCDPro().to(device)
     discriminator_family = models.DCDPro().to(device)
 
-    image_datasets = {x: datasets.ImageFolder(os.path.join(herbarium, x),
+    image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x),
                                         data_transforms[x])
                 for x in ['train', 'val']}
     
@@ -238,21 +240,20 @@ def main():
     class_name_to_id = image_datasets['train'].class_to_idx
     id_to_class_name = {v: k for k, v in class_name_to_id.items()}
     
-    # siamese_dataset = data_loader.FADADatasetSSTaxons(herbarium,
-    #                                 photo,
-    #                                 'train',
-    #                                 image_datasets['train'].class_to_idx,
-    #                                 class_name_to_id,
-    #                                 id_to_class_name,
-    #                                 config.image_size
-    #                                 )
+    siamese_dataset = data_loader.FADADatasetSS(data_dir,
+                                    photo,
+                                    'train',
+                                    image_datasets['train'].class_to_idx,
+                                    class_name_to_id,
+                                    config.image_size
+                                    )
 
     if(config.stage == 1):
         stage_1(config, device, image_datasets, classifier, encoder, ssnet, genusnet, familynet, train_kwargs, test_kwargs)
-    # elif(config.stage == 2):
-    #     encoder.load_state_dict(torch.load('best/encoder_fada_extra.pth'))
-    #     classifier.load_state_dict(torch.load('best/classifier_fada_extra.pth'))
-    #     stage_2(config, device, siamese_dataset, classifier, encoder, ssnet, genusnet, familynet, train_kwargs, test_kwargs)
+    elif(config.stage == 2):
+        encoder.load_state_dict(torch.load('../best/encoder_fada_extra.pth'))
+        classifier.load_state_dict(torch.load('../best/classifier_fada_extra.pth'))
+        stage_2(config, device, siamese_dataset, discriminator, encoder, discriminator_genus, discriminator_family, train_kwargs, test_kwargs)
     
 
 if __name__ == '__main__':
