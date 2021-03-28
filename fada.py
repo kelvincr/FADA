@@ -32,23 +32,26 @@ def train_stage_1(config, model, encoder, device, train_loader, loss_fn, optimiz
         loss.backward()
         optimizer.step()
         if batch_idx % config.log_interval == 0:
-            wandb.log({"train batch loss": loss.item()})
+            wandb.log({"train batch loss": loss.item(), 'epoch': epoch})
             if config.dry_run:
                 break
     accuracy = 100. * correct / total
     return accuracy
 
-def test_stage_1(model, encoder, device, test_loader):
+def test_stage_1(model, encoder, device, test_loader, loss_fn, epoch):
     model.eval()
-    correct, total = 0, 0
+    correct, total, test_loss = 0, 0, 0
     for data, target in test_loader:
         with torch.no_grad():
             data, target = data.to(device), target.to(device)
             outputs= model(encoder(data))
+            test_loss += loss_fn(outputs, target).sum().item()   # sum up batch loss
             _, predicted = torch.max(outputs.data, 1)
             total += target.size(0)
             correct += (predicted == target).sum().item()
     accuracy = 100. * correct / total
+    test_loss /= len(test_loader.dataset)
+    wandb.log({"test loss": test_loss, 'epoch': epoch})
     print('Accuracy test images: %d %%' % (accuracy))
     return accuracy
 
@@ -57,20 +60,20 @@ def stage_1(config, device, image_datasets, classifier, encoder, ssnet, genusnet
     test_loader = torch.utils.data.DataLoader(image_datasets['val'], **test_kwargs)
 
     opt_params = list(encoder.parameters())+list(classifier.parameters())+list(ssnet.parameters())+list(genusnet.parameters())+list(familynet.parameters())
-    optimizer = torch.optim.Adam(opt_params, lr = config.learning_rate)
+    optimizer = torch.optim.Adam(opt_params, lr = config.lr)
 
     loss_fn=torch.nn.CrossEntropyLoss()
     wandb.watch(classifier)
     scheduler = MultiStepLR(optimizer, milestones=[30], gamma=config.gamma)
-    val_accuracy, best_acc = 0.0, 0.0
+    test_accuracy, best_acc = 0.0, 0.0
     for epoch in tqdm(range(config.epochs)):
         train_accuracy = train_stage_1(config, classifier, encoder, device, train_loader, loss_fn, optimizer, epoch)
-        val_accuracy = test_stage_1(classifier, encoder, device, test_loader)
+        test_accuracy = test_stage_1(classifier, encoder, device, test_loader, loss_fn, epoch)
         scheduler.step()
-        wandb.log({"val accuracy": val_accuracy, 'Step': epoch})
-        wandb.log({"train accuracy": train_accuracy, 'Step': epoch})
-        if(val_accuracy>best_acc):
-            best_acc = val_accuracy
+        wandb.log({"test accuracy": test_accuracy, 'epoch': epoch})
+        wandb.log({"train accuracy": train_accuracy, 'epoch': epoch})
+        if(test_accuracy>best_acc):
+            best_acc = test_accuracy
             torch.save(encoder.state_dict(),os.path.join(config.result_path, 'encoder_fada_extra.pth'))
             torch.save(classifier.state_dict(), os.path.join(config.result_path, 'classifier_fada_extra.pth'))
         wandb.log({"epoch": epoch})
@@ -100,8 +103,8 @@ def train_stage_2(config, model, encoder, device, train_loader, loss_fn, optimiz
         loss.backward()
         # wandb.log({"discriminator train batch loss": loss.item()})
         if batch_idx % config.log_interval == 0:
-            wandb.log({"discriminator acc": acc})
-            wandb.log({"discriminator train batch loss": loss.item()})
+            wandb.log({"discriminator acc": acc, 'epoch': epoch})
+            wandb.log({"discriminator train batch loss": loss.item(), 'epoch': epoch})
             if config.dry_run:
                 break
     accuracy = 100. * correct / total
@@ -112,68 +115,46 @@ def stage_2(config, device, dataset, discriminator, encoder, discriminator_genus
     data_loader = torch.utils.data.DataLoader(dataset, **train_kwargs)
 
     opt_params = list(discriminator.parameters())+list(discriminator_genus.parameters())+list(discriminator_family.parameters())
-    optimizer = torch.optim.Adam(opt_params, lr=config.learning_rate)
+    optimizer = torch.optim.Adam(opt_params, lr=config.lr)
 
     loss_fn=torch.nn.CrossEntropyLoss()
     wandb.watch(discriminator)
-    #scheduler = MultiStepLR(optimizer, milestones=[30], gamma=config.gamma)
     val_accuracy, best_acc = 0.0, 0.0
     for epoch in tqdm(range(config.epochs * 2)):
         train_accuracy = train_stage_2(config, discriminator, encoder, device, data_loader, loss_fn, optimizer, epoch)
         optimizer.step()
-        wandb.log({"discriminator accuracy": val_accuracy, 'Step': epoch})
+        wandb.log({"discriminator accuracy": val_accuracy, 'epoch': epoch})
         if(val_accuracy>best_acc):
             best_acc = val_accuracy
             torch.save(discriminator.state_dict(),os.path.join(config.result_path, 'discriminator_fada_extra.pth'))
         wandb.log({"epoch": epoch})
 
-def main():
+def main(args):
     # Training settings
-    parser = argparse.ArgumentParser(description='PyTorch FADA')
-    parser.add_argument('--batch-size', type=int, default=60, metavar='N',
-                        help='input batch size for training (default: 60)')
-    parser.add_argument('--test-batch-size', type=int, default=60, metavar='N',
-                        help='input batch size for testing (default: 60)')
-    parser.add_argument('--epochs', type=int, default=60, metavar='N',
-                        help='number of epochs to train (default: 60)')
-    parser.add_argument('--lr', type=float, default=0.0001, metavar='LR',
-                        help='learning rate (default: 0.0001)')
-    parser.add_argument('--gamma', type=float, default=0.1, metavar='M',
-                        help='Learning rate step gamma (default: 0.1)')
-    parser.add_argument('--no-cuda', action='store_true', default=False,
-                        help='disables CUDA training')
-    parser.add_argument('--dry-run', action='store_true', default=False,
-                        help='quickly check a single pass')
-    parser.add_argument('--seed', type=int, default=1, metavar='S',
-                        help='random seed (default: 1)')
-    parser.add_argument('--log-interval', type=int, default=10, metavar='N',
-                        help='how many batches to wait before logging training status')
-    parser.add_argument('--save-model', action='store_true', default=False,
-                        help='For Saving the current Model')
-    parser.add_argument('--result-path', type=pathlib.Path, default="../result/",
-                        help='Path for Saving the current Model')
-    parser.add_argument('--stage', type=int, default=0, metavar='N',
-                        help='stage of model 0 all, 1 classifier, 2 discriminator, 3 final')
-    args = parser.parse_args()
+
     use_cuda = not args.no_cuda and torch.cuda.is_available()
 
     torch.manual_seed(args.seed)
 
 
     config = wandb.config
-    config.learning_rate = args.lr
+    config.lr = args.lr
     config.batch_size = args.batch_size
     config.gamma = args.gamma
     config.epochs = args.epochs
     config.test_batch_size = args.test_batch_size
     config.log_interval = args.log_interval
-    config.image_size = 224
+    config.image_size = args.image_size
     config.dry_run = args.dry_run
-    config.num_workers = 6
+    config.num_workers = args.num_workers
     config.stage = args.stage
+    config.run_name = args.run_name
 
+    tags = ['baseline', f'stage {config.stage}']
+    wandb.init(project='FADA', config=config, tags=tags)
 
-    wandb.init(project='FADA', config=config, tags=list("baseline"))
+    if len(config.run_name) > 0 :
+        wandb.run.name = config.run_name
 
     result_path = os.path.join(args.result_path, wandb.run.name)
     config.result_path = result_path
@@ -228,33 +209,64 @@ def main():
     genusnet = models.TaxonNet(510).to(device)
     familynet = models.TaxonNet(151).to(device)
 
-    discriminator = models.DCDPro().to(device)
-    discriminator_genus = models.DCDPro().to(device)
-    discriminator_family = models.DCDPro().to(device)
+    # discriminator = models.DCDPro().to(device)
+    # discriminator_genus = models.DCDPro().to(device)
+    # discriminator_family = models.DCDPro().to(device)
 
     image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x),
                                         data_transforms[x])
                 for x in ['train', 'val']}
     
-    base_mapping = image_datasets['train'].class_to_idx
-    class_name_to_id = image_datasets['train'].class_to_idx
-    id_to_class_name = {v: k for k, v in class_name_to_id.items()}
+    # base_mapping = image_datasets['train'].class_to_idx
+    # class_name_to_id = image_datasets['train'].class_to_idx
+    # id_to_class_name = {v: k for k, v in class_name_to_id.items()}
     
-    siamese_dataset = data_loader.FADADatasetSS(data_dir,
-                                    photo,
-                                    'train',
-                                    image_datasets['train'].class_to_idx,
-                                    class_name_to_id,
-                                    config.image_size
-                                    )
+    # siamese_dataset = data_loader.FADADatasetSS(data_dir,
+    #                                 photo,
+    #                                 'train',
+    #                                 image_datasets['train'].class_to_idx,
+    #                                 class_name_to_id,
+    #                                 config.image_size
+    #                                 )
 
     if(config.stage == 1):
         stage_1(config, device, image_datasets, classifier, encoder, ssnet, genusnet, familynet, train_kwargs, test_kwargs)
-    elif(config.stage == 2):
-        encoder.load_state_dict(torch.load('../best/encoder_fada_extra.pth'))
-        classifier.load_state_dict(torch.load('../best/classifier_fada_extra.pth'))
-        stage_2(config, device, siamese_dataset, discriminator, encoder, discriminator_genus, discriminator_family, train_kwargs, test_kwargs)
-    
+    # elif(config.stage == 2):
+    #     encoder.load_state_dict(torch.load('../best/encoder_fada_extra.pth'))
+    #     classifier.load_state_dict(torch.load('../best/classifier_fada_extra.pth'))
+    #     stage_2(config, device, siamese_dataset, discriminator, encoder, discriminator_genus, discriminator_family, train_kwargs, test_kwargs)     
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description='PyTorch FADA')
+    parser.add_argument('--batch-size', type=int, default=60, metavar='N',
+                        help='input batch size for training (default: 60)')
+    parser.add_argument('--test-batch-size', type=int, default=60, metavar='N',
+                        help='input batch size for testing (default: 60)')
+    parser.add_argument('--epochs', type=int, default=60, metavar='N',
+                        help='number of epochs to train (default: 60)')
+    parser.add_argument('--lr', type=float, default=0.0001, metavar='LR',
+                        help='learning rate (default: 0.0001)')
+    parser.add_argument('--gamma', type=float, default=0.1, metavar='M',
+                        help='Learning rate step gamma (default: 0.1)')
+    parser.add_argument('--no-cuda', action='store_true', default=False,
+                        help='disables CUDA training')
+    parser.add_argument('--dry-run', action='store_true', default=False,
+                        help='quickly check a single pass')
+    parser.add_argument('--seed', type=int, default=1, metavar='S',
+                        help='random seed (default: 1)')
+    parser.add_argument('--log-interval', type=int, default=10, metavar='N',
+                        help='how many batches to wait before logging training status')
+    parser.add_argument('--save-model', action='store_true', default=False,
+                        help='For Saving the current Model')
+    parser.add_argument('--result-path', type=pathlib.Path, default="../result/",
+                        help='Path for Saving the current Model')
+    parser.add_argument('--stage', type=int, default=0, metavar='N',
+                        help='stage of model 0 all, 1 classifier, 2 discriminator, 3 final')
+    parser.add_argument('--num-workers', type=int, default=6, metavar='N',
+                        help='number of workers for data loaders')
+    parser.add_argument('--image-size', type=int, default=224, metavar='N',
+                        help='image size')
+    parser.add_argument('--run-name', type=str, metavar='N',
+                    help='run name')
+    args = parser.parse_args()
+    main(args)
