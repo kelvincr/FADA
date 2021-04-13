@@ -38,17 +38,22 @@ def train_stage_1(config, model, encoder, device, train_loader, loss_fn, optimiz
     accuracy = 100. * correct / total
     return accuracy
 
-def test_stage_1(model, encoder, device, test_loader, loss_fn, epoch):
+def test_stage_1(config, model, encoder, device, test_loader, loss_fn, epoch):
     model.eval()
     correct, total, test_loss = 0, 0, 0
-    for data, target in test_loader:
+    for batch_idx, (data, target) in enumerate(test_loader):
         with torch.no_grad():
             data, target = data.to(device), target.to(device)
-            outputs= model(encoder(data))
-            test_loss += loss_fn(outputs, target).sum().item()   # sum up batch loss
+            outputs = model(encoder(data))
+            loss = loss_fn(outputs, target)   # sum up batch loss
+            test_loss += loss.sum().item()
             _, predicted = torch.max(outputs.data, 1)
             total += target.size(0)
             correct += (predicted == target).sum().item()
+            if batch_idx % config.log_interval == 0:
+                wandb.log({"test batch loss": loss.item(), 'epoch': epoch})
+                if config.dry_run:
+                    break
     accuracy = 100. * correct / total
     test_loss /= len(test_loader.dataset)
     wandb.log({"test loss": test_loss, 'epoch': epoch})
@@ -63,12 +68,13 @@ def stage_1(config, device, image_datasets, classifier, encoder, ssnet, genusnet
     optimizer = torch.optim.Adam(opt_params, lr = config.lr)
 
     loss_fn=torch.nn.CrossEntropyLoss()
+    loss_fn_test=torch.nn.CrossEntropyLoss()
     wandb.watch(classifier)
     scheduler = MultiStepLR(optimizer, milestones=[30], gamma=config.gamma)
     test_accuracy, best_acc = 0.0, 0.0
     for epoch in tqdm(range(config.epochs)):
         train_accuracy = train_stage_1(config, classifier, encoder, device, train_loader, loss_fn, optimizer, epoch)
-        test_accuracy = test_stage_1(classifier, encoder, device, test_loader, loss_fn, epoch)
+        test_accuracy = test_stage_1(config, classifier, encoder, device, test_loader, loss_fn_test, epoch)
         scheduler.step()
         wandb.log({"test accuracy": test_accuracy, 'epoch': epoch})
         wandb.log({"train accuracy": train_accuracy, 'epoch': epoch})
