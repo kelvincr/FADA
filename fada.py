@@ -159,7 +159,7 @@ def main(args):
     tags = ['baseline', f'stage {config.stage}']
     wandb.init(project='FADA', config=config, tags=tags)
 
-    if len(config.run_name) > 0 :
+    if config.run_name is not None:
         wandb.run.name = config.run_name
 
     result_path = os.path.join(args.result_path, wandb.run.name)
@@ -215,32 +215,32 @@ def main(args):
     genusnet = models.TaxonNet(510).to(device)
     familynet = models.TaxonNet(151).to(device)
 
-    # discriminator = models.DCDPro().to(device)
-    # discriminator_genus = models.DCDPro().to(device)
-    # discriminator_family = models.DCDPro().to(device)
+    discriminator = models.DCDPro().to(device)
+    discriminator_genus = models.DCDPro().to(device)
+    discriminator_family = models.DCDPro().to(device)
 
     image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x),
                                         data_transforms[x])
                 for x in ['train', 'val']}
     
-    # base_mapping = image_datasets['train'].class_to_idx
-    # class_name_to_id = image_datasets['train'].class_to_idx
-    # id_to_class_name = {v: k for k, v in class_name_to_id.items()}
+    base_mapping = image_datasets['train'].class_to_idx
+    class_name_to_id = image_datasets['train'].class_to_idx
+    id_to_class_name = {v: k for k, v in class_name_to_id.items()}
     
-    # siamese_dataset = data_loader.FADADatasetSS(data_dir,
-    #                                 photo,
-    #                                 'train',
-    #                                 image_datasets['train'].class_to_idx,
-    #                                 class_name_to_id,
-    #                                 config.image_size
-    #                                 )
+    siamese_dataset = data_loader.FADADatasetSS(data_dir,
+                                    photo,
+                                    'train',
+                                    image_datasets['train'].class_to_idx,
+                                    class_name_to_id,
+                                    config.image_size
+                                    )
 
     if(config.stage == 1):
         stage_1(config, device, image_datasets, classifier, encoder, ssnet, genusnet, familynet, train_kwargs, test_kwargs)
-    # elif(config.stage == 2):
-    #     encoder.load_state_dict(torch.load('../best/encoder_fada_extra.pth'))
-    #     classifier.load_state_dict(torch.load('../best/classifier_fada_extra.pth'))
-    #     stage_2(config, device, siamese_dataset, discriminator, encoder, discriminator_genus, discriminator_family, train_kwargs, test_kwargs)     
+    elif(config.stage == 2):
+        encoder.load_state_dict(torch.load('../best/encoder_fada_extra.pth'))
+        classifier.load_state_dict(torch.load('../best/classifier_fada_extra.pth'))
+        stage_2(config, device, siamese_dataset, discriminator, encoder, discriminator_genus, discriminator_family, train_kwargs, test_kwargs)     
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch FADA')
