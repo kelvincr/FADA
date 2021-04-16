@@ -155,6 +155,8 @@ def main(args):
     config.num_workers = args.num_workers
     config.stage = args.stage
     config.run_name = args.run_name
+    config.data_dir = args.data_dir if args.data_dir is not None else '/dev/shm/dataset'
+
 
     tags = ['baseline', f'stage {config.stage}']
     wandb.init(project='FADA', config=config, tags=tags)
@@ -204,7 +206,7 @@ def main(args):
     ])
 }
     
-    data_dir = '/dev/shm/dataset'
+    data_dir = config.data_dir 
     herbarium = os.path.join(data_dir, 'herbarium')
     photo = os.path.join(data_dir, 'photo')
 
@@ -274,5 +276,8 @@ if __name__ == '__main__':
                         help='image size')
     parser.add_argument('--run-name', type=str, metavar='N',
                     help='run name')
+    parser.add_argument('--data-dir', type=str, metavar='N',
+                    help='data directory name, default /dev/shm/dataset/')
+
     args = parser.parse_args()
     main(args)
