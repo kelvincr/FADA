@@ -20,6 +20,7 @@ import transformations
 
 def train_stage_1(config, model, encoder, device, train_loader, loss_fn, optimizer, epoch):
     model.train()
+    encoder.train()
     correct, total = 0, 0
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
