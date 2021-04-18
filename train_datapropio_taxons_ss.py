@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader,Dataset
 from torchvision import models as tmodels
 import torchvision
 from PIL import Image
+import wandb
+from tqdm import tqdm
 
 from data_loader import FADADatasetSSTaxons
 import models
@@ -17,12 +19,31 @@ import data_loader
 import transformations
 from losses import ContrastiveLoss, SpecLoss
 
+
+config = wandb.config
+config.lr1 = 0.0001
+config.lr2 = 0.0001
+config.batch_size = 10
+config.gamma1 = 0.1
+config.gamma2 = 0.1
+config.epochs = 150
+config.test_batch_size = 10
+config.log_interval = 10
+config.image_size = 224
+config.dry_run = False
+config.num_workers = 6
+config.stage = 3
+config.run_name = 'baseline_all_stages'
+config.data_dir = '/work/kjimenez/dataset/run_20/'
+config.result_path = '../result/'
+
 src = 'herbarium'  #mnist
 dst = 'photo'       #svhn
-img_size = 224  #32
-datadir = '/../dataset/'
-data_dir = '/../dataset/herbarium'
-data_dir2 = '/../dataset/photo'
+# img_size = 224  #32
+# datadir = '/work/kjimenez/dataset/run_20/'
+# data_dir = '/work/kjimenez/dataset/run_20/'
+# herbarium = '/work/kjimenez/dataset/run_20/herbarium'
+# data_dir2 = '/work/kjimenez/dataset/run_20/photo'
 #data_dir2 = '/home/villacis/Desktop/villacis/datasets/todas/todo_photo'
 #datadir = '/home/villacis/Desktop/villacis/datasets/plantclef_minida_cropped'
 #datadir = '/home/villacis/Desktop/villacis/datasets/special_10_ind'
@@ -33,6 +54,17 @@ num_epochs3 = 150
 
 use_cuda=True if torch.cuda.is_available() else False
 device=torch.device('cuda:0') if use_cuda else torch.device('cpu')
+
+tags = ['baseline', f'stage {config.stage}']
+wandb.init(project='FADA', config=config, tags=tags)
+
+if config.run_name is not None:
+    wandb.run.name = config.run_name
+
+result_path = os.path.join(config.result_path, config.run_name)
+config.result_path = result_path
+if not os.path.exists(result_path):
+    os.makedirs(result_path)
 
 
 classifier = models.ClassifierPro()
@@ -89,7 +121,7 @@ data_transforms = {
         transforms.ColorJitter(),
         transformations.TileHerb(),
         #transformations.ScaleChange(),
-        transforms.CenterCrop((img_size, img_size)),
+        transforms.CenterCrop((config.image_size, config.image_size)),
         transforms.ToTensor(),
         #transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         transforms.Normalize([0.2974, 0.3233, 0.2370], [0.1399, 0.1464, 0.1392])
@@ -99,7 +131,7 @@ data_transforms = {
     'val': transforms.Compose([
         #transforms.Resize((img_size, img_size)),
         transformations.CropField(),
-        transforms.CenterCrop((img_size, img_size)),
+        transforms.CenterCrop((config.image_size, config.image_size)),
         transforms.ToTensor(),
         transforms.Normalize([0.2974, 0.3233, 0.2370], [0.1399, 0.1464, 0.1392])
         #transforms.Normalize([0.7410, 0.7141, 0.6500], [0.0808, 0.0895, 0.1141])
@@ -110,7 +142,7 @@ data_transforms = {
     'val_photo': transforms.Compose([
         #transforms.Resize((img_size, img_size)),
         transformations.CropField(),
-        transforms.CenterCrop((img_size, img_size)),
+        transforms.CenterCrop((config.image_size, config.image_size)),
         transforms.ToTensor(),
         transforms.Normalize([0.2974, 0.3233, 0.2370], [0.1399, 0.1464, 0.1392])
         #transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
@@ -149,15 +181,9 @@ class Dataset(data2.Dataset):
         return X, y
 
 
-train_ratio=.8
-data = datasets.ImageFolder(os.path.join(data_dir), transform=data_transforms['train'])
-train_size = int(train_ratio * len(data))
-test_size = len(data) - train_size
-data_train, data_val = torch.utils.data.random_split(data, [train_size, test_size])
-
-
-image_datasets = {"train": data_train, 
-                   "val": data_val}
+image_datasets = {x: datasets.ImageFolder(os.path.join(config.data_dir, x),
+                                          data_transforms[x])
+                  for x in ['train', 'val']}
 
 dataloaders_1 = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=60,
                                              shuffle=True, num_workers=6)
@@ -212,7 +238,7 @@ image_datasets2 = {}
 #image_datasets2 = {x: datasets.ImageFolder(os.path.join(data_dir2, x),
 #                                          data_transforms[x])
 #                  for x in ['train']} #, 'val_photo', 'val'
-image_datasets2['val'] = datasets.ImageFolder('../dataset/photo',
+image_datasets2['val'] = datasets.ImageFolder(os.path.join(config.data_dir, 'photo'),
                                           data_transforms['val'])
 
 # hacer la regresion
@@ -307,8 +333,8 @@ for i in range(num_epochs1):
 
 correct = 0.0
 total = 0.0
-encoder.load_state_dict(torch.load('result/fsda_encoder_extra.pth'))
-classifier.load_state_dict(torch.load('result/fsda_classifier_extra.pth'))
+# encoder.load_state_dict(torch.load('../best/fsda_encoder_extra.pth'))
+# classifier.load_state_dict(torch.load('../best/fsda_classifier_extra.pth'))
 #classifier.load()
 
 # -----------------------------------------------------------------------------
@@ -321,18 +347,18 @@ print("Carga optimizer")
 #X_s,Y_s=data_loader.sample_src(os.path.join(datadir, src, 'train'), data_transforms['train'])
 #X_t,Y_t=data_loader.sample_tgt(os.path.join(datadir, dst, 'train'), data_transforms['train'], n = 7)
 
-siamese_dataset = FADADatasetSSTaxons('/home/ubuntu/dataset/herbarium',
-                                       '/home/ubuntu/dataset/photo',
+siamese_dataset = FADADatasetSSTaxons(os.path.join(config.data_dir, 'herbarium'),
+                                       os.path.join(config.data_dir, 'photo'),
                                         'train',
                                         base_mapping,
                                         class_name_to_id,
                                         id_to_class_name,
-                                        img_size
+                                        config.image_size
                                         )
 dataloader_2 = DataLoader(siamese_dataset,
                         shuffle=True,
-                        num_workers=6,
-                        batch_size=10)
+                        num_workers=config.num_workers,
+                        batch_size=config.batch_size)
 print("Carga datos")
 
 """
@@ -376,18 +402,19 @@ for epoch in range(num_epochs2):
 
 torch.save(discriminator.state_dict(),'result/discriminator_fada_extra.pth') # discriminator_fada.pth
 """
-discriminator.load_state_dict(torch.load('result/discriminator_fada_extra.pth'))
-discriminator_family.load_state_dict(torch.load('result/discriminator_fada_extra.pth'))
-discriminator_genus.load_state_dict(torch.load('result/discriminator_fada_extra.pth'))
+# discriminator.load_state_dict(torch.load('result/discriminator_fada_extra.pth'))
+# discriminator_family.load_state_dict(torch.load('result/discriminator_fada_extra.pth'))
+# discriminator_genus.load_state_dict(torch.load('result/discriminator_fada_extra.pth'))
 
 # -----------------------------------------------------------------------------
 ## fase 3: entrenar g y h, congelar dcd
+
 print("||||| Stage 3 |||||")
 #optimizer_g_h=torch.optim.Adam(list(encoder.parameters())+list(classifier.parameters()),lr=0.0001)  #0.0001
-optimizer_g_h=torch.optim.Adam(list(encoder.parameters())+list(classifier.parameters())+list(ssnet.parameters())+list(genusnet.parameters())+list(familynet.parameters()),lr=0.0001)
-optimizer_d=torch.optim.Adam(list(discriminator.parameters())+list(discriminator_genus.parameters())+list(discriminator_family.parameters()),lr=0.0001) #0.001
-scheduler_g_h = lr_scheduler.MultiStepLR(optimizer_g_h, milestones=[15], gamma=0.1)
-scheduler_d = lr_scheduler.MultiStepLR(optimizer_d, milestones=[15], gamma=0.1)
+optimizer_g_h=torch.optim.Adam(list(encoder.parameters())+list(classifier.parameters())+list(ssnet.parameters())+list(genusnet.parameters())+list(familynet.parameters()),lr=config.lr1)
+optimizer_d=torch.optim.Adam(list(discriminator.parameters())+list(discriminator_genus.parameters())+list(discriminator_family.parameters()),lr=config.lr2) #0.001
+scheduler_g_h = lr_scheduler.MultiStepLR(optimizer_g_h, milestones=[15], gamma=config.gamma1)
+scheduler_d = lr_scheduler.MultiStepLR(optimizer_d, milestones=[15], gamma=config.gamma2)
 
 # datasets_3 = {x: datasets.ImageFolder(os.path.join(datadir, dst, x),
 #                                           data_transforms['val_photo'])
@@ -423,8 +450,10 @@ if(accuracy>best_acc):
     best_acc = accuracy
 print("step3----Epoch %d/%d  accuracy: %.3f best_acc: %.3f " % (0, num_epochs3, accuracy, best_acc))
 """
+
+
 best_acc = 0.0
-for epoch in range(num_epochs3):
+for epoch in tqdm(range(config.epochs)):
     #---training g and h , DCD is frozen
 
     #----training g and h, dcd frozen
@@ -494,7 +523,7 @@ for epoch in range(num_epochs3):
         pred1_ss = ssnet(encoder(img1_ss))
         loss_ss = 0.5*(loss_fn(pred1_ss, label1_ss) + loss_fn(pred0_ss, label0_ss))
 
-        #print(loss_X1+loss_X2)
+        # print(loss_X1+loss_X2)
         loss_sum = loss_X1 + loss_X2 - 0.9*loss_dcd + loss_ss + 0.3*(loss_genus+loss_family)
         loss_1 += loss_sum.item()
         loss_sum.backward()
@@ -502,6 +531,8 @@ for epoch in range(num_epochs3):
 
 
     loss_1 /= cont
+    wandb.log({"loss_1 /= cont": loss_1, 'epoch': epoch})
+
     cont = 0.0
 
     #----training dcd ,g and h frozen
@@ -531,8 +562,10 @@ for epoch in range(num_epochs3):
         loss_2 += loss.item()
         loss.backward()
         optimizer_d.step()
+        wandb.log({"discriminator train batch loss": loss_2, 'epoch': epoch})
 
     loss_2 /= cont
+    wandb.log({"loss_2 /= cont": loss_2, 'epoch': epoch})
     #testing
     encoder.eval()
     classifier.eval()
@@ -548,10 +581,12 @@ for epoch in range(num_epochs3):
 
     accuracy = round(acc / float(len(test_dataloader)), 3)
     accuracy_dcd=round(buenos / cont, 3)
+    wandb.log({"accuracy": accuracy, 'epoch': epoch})
+    wandb.log({"accuracy_dcd": accuracy_dcd, 'epoch': epoch})
     if(accuracy>best_acc or True):
         best_acc = accuracy
-        nombre_e = 'result/fsda_encoder_extra_genus_family_ss' + str(epoch)+".pth"
-        nombre_c = 'result/fsda_classifier_extra_genus_family_ss' + str(epoch)+".pth"
+        nombre_e = os.path.join(config.result_path, 'fsda_encoder_extra_genus_family_ss' + str(epoch)+".pth")
+        nombre_c = os.path.join(config.result_path, 'fsda_classifier_extra_genus_family_ss' + str(epoch)+".pth")
         torch.save(encoder.state_dict(),nombre_e)
         #classifier.save()
         torch.save(classifier.state_dict(),nombre_c)
@@ -564,8 +599,10 @@ with torch.no_grad():
         labels = labels.to(device)
         y_test_pred = classifier(encoder(data))
         acc += (torch.max(y_test_pred, 1)[1] == labels).float().mean().item()
+        wandb.log({"test acc": acc})
 
 accuracy = round(acc / float(len(test_dataloader)), 3)
+wandb.log({"final test accuracy": acc})
 print("Final accuracy: {}".format(accuracy))
 
 
