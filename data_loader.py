@@ -247,6 +247,8 @@ class FADADatasetSSTaxons(Dataset):
         if(opcion == 1):
             #sx, sx
             idx = random.choice(self.classes)
+            while(len(self.idx_imgs_src[idx]) == 0):
+                idx = random.choice(self.classes)
             idx1 = idx
             idx2 = idx
             img0_path = random.choice(self.idx_imgs_src[idx])
@@ -254,6 +256,8 @@ class FADADatasetSSTaxons(Dataset):
         if(opcion == 2):
             #tx, sx
             idx = random.choice(self.mini_classes)
+            while(len(self.idx_imgs_src[idx]) == 0):
+                idx = random.choice(self.mini_classes)
             idx1 = idx
             idx2 = idx
             img0_path = random.choice(self.idx_imgs_src[idx])
@@ -262,8 +266,10 @@ class FADADatasetSSTaxons(Dataset):
         if(opcion == 3):
             #sx, sy
             idx1 = random.choice(self.classes)
+            while(len(self.idx_imgs_src[idx1]) == 0):
+                idx1 = random.choice(self.classes)
             idx2 = idx1
-            while(idx2 == idx1):
+            while(idx2 == idx1 and len(self.idx_imgs_src[idx2]) == 0):
                 idx2 = random.choice(self.classes)
             img0_path = random.choice(self.idx_imgs_src[idx1])
             img1_path = random.choice(self.idx_imgs_src[idx2])
@@ -271,8 +277,10 @@ class FADADatasetSSTaxons(Dataset):
         if(opcion == 4):
             #sx, ty
             idx2 = random.choice(self.mini_classes)
+            while(len(self.idx_imgs_src[idx2]) == 0):
+                idx2 = random.choice(self.mini_classes)
             idx1 = idx2
-            while(idx1 == idx2):
+            while(idx1 == idx2 and len(self.idx_imgs_src[idx1]) == 0):
                 idx1 = random.choice(self.classes)
             img0_path = random.choice(self.idx_imgs_src[idx1])
             img1_path = random.choice(self.idx_imgs_dst[idx2])
@@ -444,6 +452,8 @@ class FADADatasetTaxons(Dataset):
         if(opcion == 1):
             #sx, sx
             idx = random.choice(self.classes)
+            while(len(self.idx_imgs_src[idx]) == 0):
+                idx = random.choice(self.classes)
             idx1 = idx
             idx2 = idx
             img0_path = random.choice(self.idx_imgs_src[idx])
@@ -451,6 +461,8 @@ class FADADatasetTaxons(Dataset):
         if(opcion == 2):
             #tx, sx
             idx = random.choice(self.mini_classes)
+            while(len(self.idx_imgs_src[idx]) == 0):
+                idx = random.choice(self.mini_classes)
             idx1 = idx
             idx2 = idx
             img0_path = random.choice(self.idx_imgs_src[idx])
@@ -459,6 +471,8 @@ class FADADatasetTaxons(Dataset):
         if(opcion == 3):
             #sx, sy
             idx1 = random.choice(self.classes)
+            while(len(self.idx_imgs_src[idx1]) == 0):
+                idx1 = random.choice(self.classes)
             idx2 = idx1
             while(idx2 == idx1):
                 idx2 = random.choice(self.classes)
@@ -468,6 +482,8 @@ class FADADatasetTaxons(Dataset):
         if(opcion == 4):
             #sx, ty
             idx2 = random.choice(self.mini_classes)
+            while(len(self.idx_imgs_src[idx2]) == 0):
+                idx2 = random.choice(self.mini_classes)
             idx1 = idx2
             while(idx1 == idx2):
                 idx1 = random.choice(self.classes)
